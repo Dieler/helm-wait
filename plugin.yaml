@@ -1,0 +1,9 @@
+name: "wait"
+version: "2.11.0+1"
+usage: "Wait for helm release upgrades"
+description: "Wait for helm release upgrades"
+useTunnel: true
+command: "$HELM_PLUGIN_DIR/bin/wait"
+hooks:
+  install: "$HELM_PLUGIN_DIR/install-binary.sh"
+  update: "$HELM_PLUGIN_DIR/install-binary.sh"
