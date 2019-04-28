@@ -1,5 +1,4 @@
 HELM_HOME ?= $(shell helm home)
-HAS_DEP := $(shell command -v dep;)
 PLUGIN_VERSION := $(shell sed -n -e 's/version:[ "]*\([^"]*\).*/\1/p' plugin.yaml)
 HELM_VERSION := $(shell sed -n -e 's/version:[ "]*\([^"+]*\).*/v\1/p' plugin.yaml)
 
@@ -29,13 +28,6 @@ build:
 .PHONY: test
 test:
 	go test -v ./...
-
-.PHONY: bootstrap
-bootstrap:
-ifndef HAS_DEP
-	go get -u github.com/golang/dep/cmd/dep
-endif
-	dep ensure
 
 PLATFORMS := windows linux darwin
 os = $(word 1, $@)
