@@ -2,7 +2,8 @@ package cmd
 
 import (
 	"errors"
-	"google.golang.org/grpc"
+
+	"google.golang.org/grpc/status"
 )
 
 /////////////// Source: cmd/helm/helm.go ////////////////////////////
@@ -14,5 +15,5 @@ func prettyError(err error) error {
 	// This is ridiculous. Why is 'grpc.rpcError' not exported? The least they
 	// could do is throw an interface on the lib that would let us get back
 	// the desc. Instead, we have to pass ALL errors through this.
-	return errors.New(grpc.ErrorDesc(err))
+	return errors.New(status.Convert(err).Message())
 }
