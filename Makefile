@@ -33,30 +33,39 @@ test:
 .PHONY: bootstrap
 bootstrap:
 ifndef HAS_DEP
-    go get -u github.com/golang/dep/cmd/dep
+	go get -u github.com/golang/dep/cmd/dep
 endif
 	dep ensure
 
-.PHONY: dist
-dist: export COPYFILE_DISABLE=1 #teach OSX tar to not put ._* files in tar archive
-dist:
-	rm -rf build/wait/* release/*
-	mkdir -p build/wait/bin release/
+PLATFORMS := windows linux darwin
+os = $(word 1, $@)
+binary = $(if $(findstring $(word 1, $@),windows),wait.exe,wait)
+
+.PHONY: $(PLATFORMS)
+$(PLATFORMS):
+	rm -rf build/wait/*
+	mkdir -p build/wait/bin
 	cp README.md LICENSE plugin.yaml build/wait
-	GOOS=linux GOARCH=amd64 go build -o build/wait/bin/wait -ldflags="$(LDFLAGS)"
-	tar -C build/ -zcvf $(CURDIR)/release/helm-wait-linux.tgz wait/
-	GOOS=freebsd GOARCH=amd64 go build -o build/wait/bin/wait -ldflags="$(LDFLAGS)"
-	tar -C build/ -zcvf $(CURDIR)/release/helm-wait-freebsd.tgz wait/
-	GOOS=darwin GOARCH=amd64 go build -o build/wait/bin/wait -ldflags="$(LDFLAGS)"
-	tar -C build/ -zcvf $(CURDIR)/release/helm-wait-macos.tgz wait/
-	rm build/wait/bin/wait
-	GOOS=windows GOARCH=amd64 go build -o build/wait/bin/wait.exe -ldflags="$(LDFLAGS)"
-	tar -C build/ -zcvf $(CURDIR)/release/helm-wait-windows.tgz wait/
+	GOOS=linux GOARCH=amd64 go build -o build/wait/bin/$(binary) -ldflags="$(LDFLAGS)"
+	mkdir -p release/
+	tar -C build/ -zcvf $(CURDIR)/release/helm-wait-$(os).tgz wait/
+
+.PHONY: dist
+dist: windows linux darwin
 
 .PHONY: release
 release: dist
 ifndef GITHUB_TOKEN
 	$(error GITHUB_TOKEN is undefined)
 endif
-	git push
-	github-release dieler/helm-wait v$(PLUGIN_VERSION) master "v$(PLUGIN_VERSION)" "release/*"
+	hub release create $(foreach file,$(wildcard release/*),--attach=$(file)) -t master v$(PLUGIN_VERSION)
+
+BIN_DIR := $(GOPATH)/bin
+GOLANGCILINT := $(BIN_DIR)/golangci-lint
+
+$(GOLANGCILINT):
+	go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
+
+.PHONY: lint
+lint: $(GOLANGCILINT)
+	golangci-lint run

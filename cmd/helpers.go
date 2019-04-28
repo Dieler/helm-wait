@@ -13,12 +13,6 @@ import (
 	"k8s.io/helm/pkg/tlsutil"
 )
 
-const (
-	tlsCaCertDefault = "$HELM_HOME/ca.pem"
-	tlsCertDefault   = "$HELM_HOME/cert.pem"
-	tlsKeyDefault    = "$HELM_HOME/key.pem"
-)
-
 var (
 	settings        helm_env.EnvSettings
 	DefaultHelmHome = filepath.Join(homedir.HomeDir(), ".helm")
