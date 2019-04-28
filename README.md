@@ -57,14 +57,9 @@ curl -L $TARBALL_URL | tar -C $(helm home)/plugins -xzv
 
 ## Build
 
-Clone the repository into your `$GOPATH` and then build it.
-
 ```
-$ mkdir -p $GOPATH/src/github.com/dieler/
-$ cd $GOPATH/src/github.com/dieler/
 $ git clone https://github.com/dieler/helm-wait.git
 $ cd helm-wait
-$ make bootstrap
 $ make install
 ```
 
@@ -72,5 +67,5 @@ The above will install this plugin into your `$HELM_HOME/plugins` directory.
 
 ### Prerequisites
 
-- You need to have [Go](http://golang.org) installed. Make sure to set `$GOPATH`
+- You need to have [Go 1.12](http://golang.org) installed.
 

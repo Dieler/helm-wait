@@ -66,13 +66,6 @@ func scanYamlSpecs(data []byte, atEOF bool) (advance int, token []byte, err erro
 	return 0, nil, nil
 }
 
-func splitSpec(token string) (string, string) {
-	if i := strings.Index(token, "\n"); i >= 0 {
-		return token[0:i], token[i+1:]
-	}
-	return "", ""
-}
-
 func ParseRelease(release *release.Release, includeTests bool) map[string]*MappingResult {
 	manifest := release.Manifest
 	for _, hook := range release.Hooks {
