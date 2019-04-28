@@ -11,7 +11,7 @@ import (
 
 func foundObjects(result map[string]*manifest.MappingResult) []string {
 	objs := make([]string, 0, len(result))
-	for k, _ := range result {
+	for k := range result {
 		objs = append(objs, k)
 	}
 	sort.Strings(objs)

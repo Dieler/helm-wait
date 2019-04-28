@@ -17,7 +17,6 @@ import (
 type upgrade struct {
 	release          string
 	client           helm.Interface
-	timeout          int64
 }
 
 const upgradeCmdLongUsage = `
@@ -150,5 +149,6 @@ func (u *upgrade) getModifiedOrNewResources(previous, current map[string]*manife
 func (u *upgrade) fprintf(color, format string, args ...interface{}) {
 	if _, err := fmt.Fprintf(os.Stdout, ansi.Color(format, color)+"\n", args); err != nil {
 		// do nothing else, just stop Intellij complaining about unhandled errors
+		return
 	}
 }
