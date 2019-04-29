@@ -38,7 +38,7 @@ $(PLATFORMS):
 	rm -rf build/wait/*
 	mkdir -p build/wait/bin
 	cp README.md LICENSE plugin.yaml build/wait
-	GOOS=linux GOARCH=amd64 go build -o build/wait/bin/$(binary) -ldflags="$(LDFLAGS)"
+	GOOS=$(os) GOARCH=amd64 go build -o build/wait/bin/$(binary) -ldflags="$(LDFLAGS)"
 	mkdir -p release/
 	tar -C build/ -zcvf $(CURDIR)/release/helm-wait-$(os).tgz wait/
 
