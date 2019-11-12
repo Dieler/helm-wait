@@ -1,5 +1,5 @@
 name: "wait"
-version: "2.11.0+2"
+version: "2.11.0+3"
 usage: "Wait for helm release upgrades"
 description: "Wait for helm release upgrades"
 useTunnel: true
