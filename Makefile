@@ -32,6 +32,7 @@ test:
 PLATFORMS := windows linux darwin
 os = $(word 1, $@)
 binary = $(if $(findstring $(word 1, $@),windows),wait.exe,wait)
+release-os = $(if $(findstring $(os),darwin),macos,$(os))
 
 .PHONY: $(PLATFORMS)
 $(PLATFORMS):
@@ -40,7 +41,7 @@ $(PLATFORMS):
 	cp README.md LICENSE plugin.yaml build/wait
 	GOOS=$(os) GOARCH=amd64 go build -o build/wait/bin/$(binary) -ldflags="$(LDFLAGS)"
 	mkdir -p release/
-	tar -C build/ -zcvf $(CURDIR)/release/helm-wait-$(os).tgz wait/
+	tar -C build/ -zcvf $(CURDIR)/release/helm-wait-$(release-os).tgz wait/
 
 .PHONY: dist
 dist: windows linux darwin
