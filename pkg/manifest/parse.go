@@ -4,35 +4,38 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"helm.sh/helm/v3/pkg/release"
 	"log"
 	"strings"
 
-	"gopkg.in/yaml.v2"
-	"k8s.io/helm/pkg/proto/hapi/release"
+	yaml "gopkg.in/yaml.v2"
 )
 
-var yamlSeparator = []byte("\n---\n")
+const (
+	hookAnnotation = "helm.sh/hook"
+)
 
+var yamlSeperator = []byte("\n---\n")
+
+// MappingResult to store result of diff
 type MappingResult struct {
 	Name     string
 	Content  string
 	Metadata Metadata
-	Object   ObjectInfo
 }
 
-type ObjectInfo map[interface{}]interface{}
-
 type Metadata struct {
-	ApiVersion string `yaml:"apiVersion"`
+	APIVersion string `yaml:"apiVersion"`
 	Kind       string
 	Metadata   struct {
-		Namespace string
-		Name      string
+		Namespace   string
+		Name        string
+		Annotations map[string]string
 	}
 }
 
 func (m Metadata) String() string {
-	apiBase := m.ApiVersion
+	apiBase := m.APIVersion
 	sp := strings.Split(apiBase, "/")
 	if len(sp) > 1 {
 		apiBase = strings.Join(sp[:len(sp)-1], "/")
@@ -41,22 +44,13 @@ func (m Metadata) String() string {
 	return fmt.Sprintf("%s, %s, %s (%s)", m.Metadata.Namespace, m.Metadata.Name, m.Kind, apiBase)
 }
 
-func (m Metadata) TypeString() string {
-	apiBase := m.ApiVersion
-	sp := strings.Split(apiBase, "/")
-	if len(sp) > 1 {
-		apiBase = strings.Join(sp[:], "")
-	}
-	return fmt.Sprintf("%s.%s", apiBase, m.Kind)
-}
-
 func scanYamlSpecs(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
 	}
-	if i := bytes.Index(data, yamlSeparator); i >= 0 {
+	if i := bytes.Index(data, yamlSeperator); i >= 0 {
 		// We have a full newline-terminated line.
-		return i + len(yamlSeparator), data[0:i], nil
+		return i + len(yamlSeperator), data[0:i], nil
 	}
 	// If we're at EOF, we have a final, non-terminated line. Return it.
 	if atEOF {
@@ -66,6 +60,14 @@ func scanYamlSpecs(data []byte, atEOF bool) (advance int, token []byte, err erro
 	return 0, nil, nil
 }
 
+func splitSpec(token string) (string, string) {
+	if i := strings.Index(token, "\n"); i >= 0 {
+		return token[0:i], token[i+1:]
+	}
+	return "", ""
+}
+
+// ParseRelease parses release objects into MappingResult
 func ParseRelease(release *release.Release, includeTests bool) map[string]*MappingResult {
 	manifest := release.Manifest
 	for _, hook := range release.Hooks {
@@ -80,63 +82,119 @@ func ParseRelease(release *release.Release, includeTests bool) map[string]*Mappi
 	return Parse(manifest, release.Namespace)
 }
 
-func Parse(manifest string, defaultNamespace string) map[string]*MappingResult {
-	scanner := bufio.NewScanner(strings.NewReader(manifest))
+// Parse parses manifest strings into MappingResult
+func Parse(manifest string, defaultNamespace string, excludedHooks ...string) map[string]*MappingResult {
+	// Ensure we have a newline in front of the yaml seperator
+	scanner := bufio.NewScanner(strings.NewReader("\n" + manifest))
 	scanner.Split(scanYamlSpecs)
-	//Allow for tokens (specs) up to 1M in size
-	scanner.Buffer(make([]byte, bufio.MaxScanTokenSize), 1048576)
-	//Discard the first result, we only care about everything after the first seperator
+	// Allow for tokens (specs) up to 10MiB in size
+	scanner.Buffer(make([]byte, bufio.MaxScanTokenSize), 10485760)
+	// Discard the first result, we only care about everything after the first separator
 	scanner.Scan()
 
 	result := make(map[string]*MappingResult)
 
 	for scanner.Scan() {
-		content := scanner.Text()
-		if strings.TrimSpace(content) == "" {
-			continue
-		}
-		var parsedMetadata Metadata
-		if err := yaml.Unmarshal([]byte(content), &parsedMetadata); err != nil {
-			log.Fatalf("YAML unmarshal error: %s\nCan't metadata from %s", err, content)
-		}
-
-		//Skip content without any Metadata.  It is probably a template that
-		//only contains comments in the current state.
-		if (Metadata{}) == parsedMetadata {
+		content := strings.TrimSpace(scanner.Text())
+		if content == "" {
 			continue
 		}
 
-		if parsedMetadata.Metadata.Namespace == "" {
-			parsedMetadata.Metadata.Namespace = defaultNamespace
+		parsed, err := parseContent(content, defaultNamespace, excludedHooks...)
+		if err != nil {
+			log.Fatalf("%v", err)
 		}
 
-		objectInfo := make(map[interface{}]interface{})
-		if err := yaml.Unmarshal([]byte(content), &objectInfo); err != nil {
-			log.Fatalf("YAML unmarshal error: %s\nCan't unmarshal objectinfo from %s", err, content)
-		}
+		for _, p := range parsed {
+			name := p.Name
 
-		name := parsedMetadata.String()
-
-		if _, ok := result[name]; ok {
-			log.Printf("Error: Found duplicate key %#v in manifest", name)
-		} else {
-			result[name] = &MappingResult{
-				Name:     name,
-				Metadata: parsedMetadata,
-				Content:  content,
-				Object:   objectInfo,
+			if _, ok := result[name]; ok {
+				log.Printf("Error: Found duplicate key %#v in manifest", name)
+			} else {
+				result[name] = p
 			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Error reading input: %s", err)
 	}
 	return result
 }
 
-func isTestHook(hookEvents []release.Hook_Event) bool {
-	for _, event := range hookEvents {
-		if event == release.Hook_RELEASE_TEST_FAILURE || event == release.Hook_RELEASE_TEST_SUCCESS {
+func parseContent(content string, defaultNamespace string, excludedHooks ...string) ([]*MappingResult, error) {
+	var parsedMetadata Metadata
+	if err := yaml.Unmarshal([]byte(content), &parsedMetadata); err != nil {
+		log.Fatalf("YAML unmarshal error: %s\nCan't unmarshal %s", err, content)
+	}
+
+	// Skip content without any Metadata. It is probably a template that
+	// only contains comments in the current state.
+	if parsedMetadata.APIVersion == "" && parsedMetadata.Kind == "" {
+		return nil, nil
+	}
+
+	if parsedMetadata.Kind == "List" {
+		type ListV1 struct {
+			Items []yaml.MapSlice `yaml:"items"`
+		}
+
+		var list ListV1
+
+		if err := yaml.Unmarshal([]byte(content), &list); err != nil {
+			log.Fatalf("YAML unmarshal error: %s\nCan't unmarshal %s", err, content)
+		}
+
+		var result []*MappingResult
+
+		for _, item := range list.Items {
+			subcontent, err := yaml.Marshal(item)
+			if err != nil {
+				log.Printf("YAML marshal error: %s\nCan't marshal %v", err, item)
+			}
+
+			subs, err := parseContent(string(subcontent), defaultNamespace, excludedHooks...)
+			if err != nil {
+				return nil, fmt.Errorf("Parsing YAML list item: %v", err)
+			}
+
+			result = append(result, subs...)
+		}
+
+		return result, nil
+	}
+
+	if isHook(parsedMetadata, excludedHooks...) {
+		return nil, nil
+	}
+
+	if parsedMetadata.Metadata.Namespace == "" {
+		parsedMetadata.Metadata.Namespace = defaultNamespace
+	}
+
+	name := parsedMetadata.String()
+	return []*MappingResult{
+		{
+			Name:     name,
+			Metadata: parsedMetadata,
+			Content:  content,
+		},
+	}, nil
+}
+
+func isHook(metadata Metadata, hooks ...string) bool {
+	for _, hook := range hooks {
+		if metadata.Metadata.Annotations[hookAnnotation] == hook {
 			return true
 		}
 	}
+	return false
+}
 
+func isTestHook(hookEvents []release.HookEvent) bool {
+	for _, event := range hookEvents {
+		if event == release.HookTest {
+			return true
+		}
+	}
 	return false
 }
