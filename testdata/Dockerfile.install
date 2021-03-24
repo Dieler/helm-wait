@@ -1,0 +1,8 @@
+FROM alpine/helm:3.5.1
+
+ADD . /workspace
+
+WORKDIR /workspace
+
+RUN helm plugin install .
+RUN helm plugin list

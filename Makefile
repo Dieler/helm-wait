@@ -1,13 +1,19 @@
-HELM_HOME ?= $(shell helm home)
 PLUGIN_VERSION := $(shell sed -n -e 's/version:[ "]*\([^"]*\).*/\1/p' plugin.yaml)
 HELM_VERSION := $(shell sed -n -e 's/version:[ "]*\([^"+]*\).*/v\1/p' plugin.yaml)
+HELM_PLUGINS := $(shell bash -c 'eval $$(helm env); echo $$HELM_PLUGINS')
+
 
 PKG:= github.com/dieler/helm-wait
 LDFLAGS := -X $(PKG)/cmd.Version=$(PLUGIN_VERSION)
 
-# Clear the "unreleased" string in BuildMetadata
-LDFLAGS += -X $(PKG)/vendor/k8s.io/helm/pkg/version.BuildMetadata=
-LDFLAGS += -X $(PKG)/vendor/k8s.io/helm/pkg/version.Version=$(HELM_VERSION)
+.PHONY: deps
+deps:
+	go get github.com/spf13/cobra@v1.1.3
+	go get github.com/spf13/pflag@v1.0.5
+	go get gopkg.in/yaml.v2@v2.3.0
+	go get github.com/mgutz/ansi
+	go get helm.sh/helm/v3@v3.5.1
+	go get k8s.io/client-go@v0.19.9
 
 .PHONY: format
 format:
@@ -16,18 +22,38 @@ format:
 
 .PHONY: install
 install: build
-	mkdir -p $(HELM_HOME)/plugins/helm-wait/bin
-	cp bin/wait $(HELM_HOME)/plugins/helm-wait/bin
-	cp plugin.yaml $(HELM_HOME)/plugins/helm-wait/
+	mkdir -p $(HELM_PLUGINS)/helm-wait/bin
+	cp bin/wait $(HELM_PLUGINS)/helm-wait/bin
+	cp plugin.yaml $(HELM_PLUGINS)/helm-wait/
 
 .PHONY: build
 build:
 	mkdir -p bin/
-	go build -i -v -o bin/wait -ldflags="$(LDFLAGS)"
+	go build -v -o bin/wait -ldflags="$(LDFLAGS)"
 
 .PHONY: test
 test:
 	go test -v ./...
+
+.PHONY: vet
+vet:
+	go vet -v ./...
+
+GOLANGLINT := golint
+$(GOLANGLINT):
+	go get golang.org/x/lint/golint
+
+.PHONY: lint
+lint: $(GOLANGLINT)
+	golint ./...
+
+.PHONY: fmt
+fmt:
+	go fmt ./...
+
+.PHONY: test-plugin-installation
+test-plugin-installation:
+	docker build -f testdata/Dockerfile.install .
 
 PLATFORMS := windows linux darwin
 os = $(word 1, $@)
@@ -52,13 +78,3 @@ ifndef GITHUB_TOKEN
 	$(error GITHUB_TOKEN is undefined)
 endif
 	hub release create $(foreach file,$(wildcard release/*),--attach=$(file)) -t master v$(PLUGIN_VERSION)
-
-BIN_DIR := $(GOPATH)/bin
-GOLANGCILINT := $(BIN_DIR)/golangci-lint
-
-$(GOLANGCILINT):
-	go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
-
-.PHONY: lint
-lint: $(GOLANGCILINT)
-	golangci-lint run

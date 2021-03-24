@@ -1,7 +1,15 @@
 package main
 
-import "github.com/dieler/helm-wait/cmd"
+import (
+	"os"
+
+	"github.com/dieler/helm-wait/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	migrateCmd := cmd.NewRootCmd(os.Stdout, os.Args[1:])
+
+	if err := migrateCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
