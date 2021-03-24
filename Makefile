@@ -67,7 +67,7 @@ $(PLATFORMS):
 	cp README.md LICENSE plugin.yaml build/wait
 	GOOS=$(os) GOARCH=amd64 go build -o build/wait/bin/$(binary) -ldflags="$(LDFLAGS)"
 	mkdir -p release/
-	tar -C build/ -zcvf $(CURDIR)/release/helm-wait-$(release-os).tgz wait/
+	tar -C build/wait -zcvf $(CURDIR)/release/helm-wait-$(release-os).tgz .
 
 .PHONY: dist
 dist: windows linux darwin
