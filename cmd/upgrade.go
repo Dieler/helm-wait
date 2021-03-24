@@ -3,93 +3,94 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/dieler/helm-wait/pkg/common"
+	"github.com/dieler/helm-wait/pkg/helm"
 	"github.com/dieler/helm-wait/pkg/kube"
 	"github.com/dieler/helm-wait/pkg/manifest"
+	"github.com/mgutz/ansi"
+	"helm.sh/helm/v3/pkg/release"
+	"io"
 	"os"
 	"time"
 
-	"github.com/mgutz/ansi"
 	"github.com/spf13/cobra"
-	"k8s.io/helm/pkg/helm"
-	"k8s.io/helm/pkg/proto/hapi/release"
 )
-
-type upgrade struct {
-	release          string
-	client           helm.Interface
-}
 
 const upgradeCmdLongUsage = `
 This command compares the current revision of the given release with its previous revision and waits until all changes of the current revision have been applied.
-
 Example:
 $ helm wait upgrade my-release
+$ helm wait upgrade my-release --timeout 600
 `
 
-// upgradeCmd waits until all added resources have been created and all changes have been applied.
 var (
-	upgradeCmd = &cobra.Command{
-		Use:   "upgrade",
-		Short: "Wait until all changes in the current release have been applied",
-		Long:  upgradeCmdLongUsage,
-		PreRun: func(*cobra.Command, []string) {
-			expandTLSPaths()
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// suppress the command usage on error
-			cmd.SilenceUsage = true
-			upgrade := upgrade{}
-			switch {
-			case len(args) < 1:
-				return errors.New("too few arguments to command \"upgrade\", the name of a release is required")
-			case len(args) > 1:
-				return errors.New("too many arguments to command \"upgrade\", only name of a release is allowed")
-			}
-			upgrade.release = args[0]
-			if upgrade.client == nil {
-				upgrade.client = createHelmClient()
-			}
-			return upgrade.run()
-		},
-	}
 	timeout int64
 )
 
-func init() {
-	rootCmd.AddCommand(upgradeCmd)
-	upgradeCmd.Flags().Int64Var(&timeout, "timeout", 300, "time in seconds to wait for any individual Kubernetes operation (like Jobs for hooks)")
-	addCommonCmdOptions(upgradeCmd.Flags())
+func newUpgradeCmd(out io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "upgrade RELEASE_NAME",
+		Short: "Wait until all changes in the current release have been applied",
+		Long:  upgradeCmdLongUsage,
+		Args: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+		RunE: runUpgrade,
+	}
+
+	flags := cmd.Flags()
+	flags.Int64Var(&timeout, "timeout", 300, "time in seconds to wait for any individual Kubernetes operation (like Jobs for hooks)")
+	settings.AddFlags(flags)
+	return cmd
 }
 
-func (u *upgrade) run() error {
-	releaseHistory, err := u.client.ReleaseHistory(u.release, helm.WithMaxHistory(5))
-	if err != nil {
-		return prettyError(err)
+func runUpgrade(cmd *cobra.Command, args []string) error {
+	switch {
+	case len(args) < 1:
+		return errors.New("too few arguments to command \"upgrade\", the name of a release is required")
+	case len(args) > 1:
+		return errors.New("too many arguments to command \"upgrade\", only name of a release is allowed")
 	}
-	releases := releaseHistory.GetReleases()
-	currentRelease := releases[0]
-	status := currentRelease.GetInfo().GetStatus().Code
-	if status != release.Status_DEPLOYED && status != release.Status_PENDING_UPGRADE {
-		fmt.Printf("Current version is not an update or was not successful: version=%d, status=%s\n", currentRelease.GetVersion(), status)
+	kubeConfig := common.KubeConfig{
+		Context: settings.KubeContext,
+		File:    settings.KubeConfigFile,
+	}
+	return upgrade(args[0], kubeConfig)
+}
+
+func upgrade(releaseName string, kubeConfig common.KubeConfig) error {
+	cfg, err := helm.GetActionConfig("default", kubeConfig)
+	if err != nil {
+		return err
+	}
+	history, err := cfg.Releases.History(releaseName)
+	if err != nil {
+		return err
+	}
+	currentRelease := history[0]
+	currentRelease.Info.Status.IsPending()
+
+	if currentRelease.Info.Status.IsPending() {
+		fmt.Printf("Current version is not an update or was not successful: version=%d, status=%s\n", currentRelease.Version, currentRelease.Info.Status)
 		return nil
 	}
 	var previousRelease *release.Release
-	for _, r := range releases[1:] {
-		if r.GetInfo().GetStatus().Code == release.Status_SUPERSEDED {
+	for _, r := range history[1:] {
+		if r.Info.Status == release.StatusSuperseded {
 			previousRelease = r
 			break
 		}
 	}
-	fmt.Printf("Current release: %d\n", currentRelease.GetVersion())
+	fmt.Printf("Current release: %d\n", currentRelease.Version)
 	currentSpecs := manifest.ParseRelease(currentRelease, false)
 	var previousSpecs map[string]*manifest.MappingResult
 	if previousRelease == nil {
 		previousSpecs = map[string]*manifest.MappingResult{}
 	} else {
-		fmt.Printf("Previous release: %d\n", previousRelease.GetVersion())
+		fmt.Printf("Previous release: %d\n", previousRelease.Version)
 		previousSpecs = manifest.ParseRelease(previousRelease, false)
 	}
-	changes, err := u.getModifiedOrNewResources(previousSpecs, currentSpecs)
+	changes, err := getModifiedOrNewResources(previousSpecs, currentSpecs)
 	if err != nil {
 		return err
 	}
@@ -100,8 +101,8 @@ func (u *upgrade) run() error {
 	return kc.WaitForResources(time.Duration(timeout)*time.Second, changes)
 }
 
-
 type change int
+
 const (
 	ADDED change = iota
 	CHANGED
@@ -116,7 +117,7 @@ func (c change) format() string {
 	return [...]string{"++ %s", "~~ %s", "-- %s"}[c]
 }
 
-func (u *upgrade) getModifiedOrNewResources(previous, current map[string]*manifest.MappingResult) ([]*manifest.MappingResult, error) {
+func getModifiedOrNewResources(previous, current map[string]*manifest.MappingResult) ([]*manifest.MappingResult, error) {
 	result := []*manifest.MappingResult{}
 	changes := make(map[string]change)
 	for key, previousValue := range previous {
@@ -138,7 +139,7 @@ func (u *upgrade) getModifiedOrNewResources(previous, current map[string]*manife
 	if len(changes) > 0 {
 		fmt.Println("Changes:")
 		for k, v := range changes {
-			u.fprintf(v.color(), v.format(), k)
+			fprintf(v.color(), v.format(), k)
 		}
 	} else {
 		fmt.Println("No changes")
@@ -146,7 +147,7 @@ func (u *upgrade) getModifiedOrNewResources(previous, current map[string]*manife
 	return result, nil
 }
 
-func (u *upgrade) fprintf(color, format string, args ...interface{}) {
+func fprintf(color, format string, args ...interface{}) {
 	if _, err := fmt.Fprintf(os.Stdout, ansi.Color(format, color)+"\n", args); err != nil {
 		// do nothing else, just stop Intellij complaining about unhandled errors
 		return
