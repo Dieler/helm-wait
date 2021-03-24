@@ -11,7 +11,7 @@ echo "Downloading and installing helm-wait v${version} ..."
 
 url=""
 if [ "$(uname)" = "Darwin" ]; then
-    url="https://github.com/Dieler/helm-wait/releases/download/v${version}/helm-wait-darwin.tar.gz"
+    url="https://github.com/Dieler/helm-wait/releases/download/v${version}/helm-wait-macos.tar.gz"
 elif [ "$(uname)" = "Linux" ] ; then
     url="https://github.com/Dieler/helm-wait/releases/download/v${version}/helm-wait-linux.tar.gz"
 else
