@@ -55,11 +55,11 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		Context: settings.KubeContext,
 		File:    settings.KubeConfigFile,
 	}
-	return upgrade(args[0], kubeConfig)
+	return upgrade(args[0], settings.namespace, kubeConfig)
 }
 
-func upgrade(releaseName string, kubeConfig common.KubeConfig) error {
-	cfg, err := helm.GetActionConfig("default", kubeConfig)
+func upgrade(releaseName, namespace string, kubeConfig common.KubeConfig) error {
+	cfg, err := helm.GetActionConfig(namespace, kubeConfig)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func (c change) format() string {
 }
 
 func getModifiedOrNewResources(previous, current map[string]*manifest.MappingResult) ([]*manifest.MappingResult, error) {
-	result := []*manifest.MappingResult{}
+	var result []*manifest.MappingResult
 	changes := make(map[string]change)
 	for key, previousValue := range previous {
 		if currentValue, ok := current[key]; ok {
