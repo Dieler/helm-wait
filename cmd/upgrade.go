@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dieler/helm-wait/pkg/common"
+	"github.com/dieler/helm-wait/pkg/diff"
 	"github.com/dieler/helm-wait/pkg/helm"
 	"github.com/dieler/helm-wait/pkg/kube"
 	"github.com/dieler/helm-wait/pkg/manifest"
-	"github.com/mgutz/ansi"
 	"helm.sh/helm/v3/pkg/release"
 	"io"
 	"os"
@@ -67,15 +67,15 @@ func upgrade(releaseName, namespace string, kubeConfig common.KubeConfig) error 
 	if err != nil {
 		return err
 	}
-	currentRelease := history[0]
+	currentRelease := history[len(history) - 1]
 	currentRelease.Info.Status.IsPending()
-
 	if currentRelease.Info.Status.IsPending() {
 		fmt.Printf("Current version is not an update or was not successful: version=%d, status=%s\n", currentRelease.Version, currentRelease.Info.Status)
 		return nil
 	}
 	var previousRelease *release.Release
-	for _, r := range history[1:] {
+	for i := len(history) - 2; i >= 0; i-- {
+		r := history[i]
 		if r.Info.Status == release.StatusSuperseded {
 			previousRelease = r
 			break
@@ -90,66 +90,13 @@ func upgrade(releaseName, namespace string, kubeConfig common.KubeConfig) error 
 		fmt.Printf("Previous release: %d\n", previousRelease.Version)
 		previousSpecs = manifest.ParseRelease(previousRelease, false)
 	}
-	changes, err := getModifiedOrNewResources(previousSpecs, currentSpecs)
+	changes, err := diff.GetModifiedOrNewResources(previousSpecs, currentSpecs, os.Stdout)
 	if err != nil {
 		return err
 	}
-	kc, err := kube.New()
+	kc, err := kube.New(os.Stdout)
 	if err != nil {
 		return err
 	}
 	return kc.WaitForResources(time.Duration(timeout)*time.Second, changes)
-}
-
-type change int
-
-const (
-	ADDED change = iota
-	CHANGED
-	REMOVED
-)
-
-func (c change) color() string {
-	return [...]string{"green", "yellow", "red"}[c]
-}
-
-func (c change) format() string {
-	return [...]string{"++ %s", "~~ %s", "-- %s"}[c]
-}
-
-func getModifiedOrNewResources(previous, current map[string]*manifest.MappingResult) ([]*manifest.MappingResult, error) {
-	var result []*manifest.MappingResult
-	changes := make(map[string]change)
-	for key, previousValue := range previous {
-		if currentValue, ok := current[key]; ok {
-			if previousValue.Content != currentValue.Content {
-				changes[key] = CHANGED
-				result = append(result, currentValue)
-			}
-		} else {
-			changes[key] = REMOVED
-		}
-	}
-	for key := range current {
-		if _, ok := previous[key]; !ok {
-			changes[key] = ADDED
-			result = append(result, current[key])
-		}
-	}
-	if len(changes) > 0 {
-		fmt.Println("Changes:")
-		for k, v := range changes {
-			fprintf(v.color(), v.format(), k)
-		}
-	} else {
-		fmt.Println("No changes")
-	}
-	return result, nil
-}
-
-func fprintf(color, format string, args ...interface{}) {
-	if _, err := fmt.Fprintf(os.Stdout, ansi.Color(format, color)+"\n", args); err != nil {
-		// do nothing else, just stop Intellij complaining about unhandled errors
-		return
-	}
 }
