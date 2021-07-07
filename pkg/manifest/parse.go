@@ -27,11 +27,13 @@ type MappingResult struct {
 type Metadata struct {
 	APIVersion string `yaml:"apiVersion"`
 	Kind       string
-	Metadata   struct {
-		Namespace   string
-		Name        string
-		Annotations map[string]string
-	}
+	ObjectMeta ObjectMeta `yaml:"metadata"`
+}
+
+type ObjectMeta struct {
+	Namespace   string
+	Name        string
+	Annotations map[string]string
 }
 
 func (m Metadata) String() string {
@@ -40,8 +42,7 @@ func (m Metadata) String() string {
 	if len(sp) > 1 {
 		apiBase = strings.Join(sp[:len(sp)-1], "/")
 	}
-
-	return fmt.Sprintf("%s, %s, %s (%s)", m.Metadata.Namespace, m.Metadata.Name, m.Kind, apiBase)
+	return fmt.Sprintf("%s, %s, %s (%s)", m.ObjectMeta.Namespace, m.ObjectMeta.Name, m.Kind, apiBase)
 }
 
 func scanYamlSpecs(data []byte, atEOF bool) (advance int, token []byte, err error) {
@@ -127,7 +128,7 @@ func parseContent(content string, defaultNamespace string, excludedHooks ...stri
 		log.Fatalf("YAML unmarshal error: %s\nCan't unmarshal %s", err, content)
 	}
 
-	// Skip content without any Metadata. It is probably a template that
+	// Skip content without any ObjectMeta. It is probably a template that
 	// only contains comments in the current state.
 	if parsedMetadata.APIVersion == "" && parsedMetadata.Kind == "" {
 		return nil, nil
@@ -167,8 +168,8 @@ func parseContent(content string, defaultNamespace string, excludedHooks ...stri
 		return nil, nil
 	}
 
-	if parsedMetadata.Metadata.Namespace == "" {
-		parsedMetadata.Metadata.Namespace = defaultNamespace
+	if parsedMetadata.ObjectMeta.Namespace == "" {
+		parsedMetadata.ObjectMeta.Namespace = defaultNamespace
 	}
 
 	name := parsedMetadata.String()
@@ -183,7 +184,7 @@ func parseContent(content string, defaultNamespace string, excludedHooks ...stri
 
 func isHook(metadata Metadata, hooks ...string) bool {
 	for _, hook := range hooks {
-		if metadata.Metadata.Annotations[hookAnnotation] == hook {
+		if metadata.ObjectMeta.Annotations[hookAnnotation] == hook {
 			return true
 		}
 	}
