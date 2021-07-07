@@ -1,5 +1,5 @@
 name: "wait"
-version: "0.0.4"
+version: "0.0.5"
 usage: "Wait for helm release upgrades"
 description: "Wait for helm release upgrades"
 command: "$HELM_PLUGIN_DIR/bin/wait"
