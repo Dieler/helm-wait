@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/dieler/helm-wait/pkg/manifest"
+	"io"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -21,9 +22,10 @@ var Config = filepath.Join(homedir.HomeDir(), ".kube", "config")
 
 type Client struct {
 	clientset *kubernetes.Clientset
+	out io.Writer
 }
 
-func New() (*Client, error) {
+func New(out io.Writer) (*Client, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", Config)
 	if err != nil {
 		return nil, err
@@ -32,7 +34,7 @@ func New() (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{clientset: clientset}, nil
+	return &Client{clientset: clientset, out: out}, nil
 }
 
 // deployment holds associated replicaSet for a deployment
@@ -54,7 +56,7 @@ func (c *Client) WaitForResources(timeout time.Duration, resources []*manifest.M
 			case "ReplicationController":
 			case "Pod":
 			case "Deployment":
-				currentDeployment, err := c.clientset.AppsV1().Deployments(r.Metadata.Metadata.Namespace).Get(context.TODO(), r.Metadata.Metadata.Name, metav1.GetOptions{})
+				currentDeployment, err := c.clientset.AppsV1().Deployments(r.Metadata.ObjectMeta.Namespace).Get(context.TODO(), r.Metadata.ObjectMeta.Name, metav1.GetOptions{})
 				if err != nil {
 					return false, err
 				}
@@ -69,7 +71,7 @@ func (c *Client) WaitForResources(timeout time.Duration, resources []*manifest.M
 				}
 				deployments = append(deployments, newDeployment)
 			case "StatefulSet":
-				sf, err := c.clientset.AppsV1().StatefulSets(r.Metadata.Metadata.Namespace).Get(context.TODO(), r.Metadata.Metadata.Name, metav1.GetOptions{})
+				sf, err := c.clientset.AppsV1().StatefulSets(r.Metadata.ObjectMeta.Namespace).Get(context.TODO(), r.Metadata.ObjectMeta.Name, metav1.GetOptions{})
 				if err != nil {
 					return false, err
 				}
@@ -181,7 +183,7 @@ func findNewReplicaSet(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSe
 func (c *Client) statefulSetsReady(statefulsets []appsv1.StatefulSet) bool {
 	for _, sf := range statefulsets {
 		if sf.Status.UpdateRevision != sf.Status.CurrentRevision || sf.Status.ReadyReplicas != *sf.Spec.Replicas {
-			fmt.Printf("StatefulSet is not ready: %s/%s\n", sf.GetNamespace(), sf.GetName())
+			fmt.Fprintf(c.out, "StatefulSet is not ready: %s/%s\n", sf.GetNamespace(), sf.GetName())
 			return false
 		}
 	}
@@ -191,7 +193,7 @@ func (c *Client) statefulSetsReady(statefulsets []appsv1.StatefulSet) bool {
 func (c *Client) deploymentsReady(deployments []deployment) bool {
 	for _, d := range deployments {
 		if d.replicaSet.Status.ReadyReplicas != *d.deployment.Spec.Replicas {
-			fmt.Printf("Deployment is not ready: %s/%s\n", d.deployment.GetNamespace(), d.deployment.GetName())
+			fmt.Fprintf(c.out, "Deployment is not ready: %s/%s\n", d.deployment.GetNamespace(), d.deployment.GetName())
 			return false
 		}
 	}
