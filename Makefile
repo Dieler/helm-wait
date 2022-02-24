@@ -14,6 +14,8 @@ deps:
 	go get github.com/mgutz/ansi
 	go get helm.sh/helm/v3@v3.5.1
 	go get k8s.io/client-go@v0.19.9
+	go get github.com/openshift/api/apps/v1@release-4.11
+	go get github.com/openshift/client-go/apps/clientset/versioned@release-4.11
 
 .PHONY: format
 format:
@@ -29,7 +31,7 @@ install: build
 .PHONY: build
 build:
 	mkdir -p bin/
-	go build -v -o bin/wait -ldflags="$(LDFLAGS)"
+	CGO_ENABLED=0 go build -v -o bin/wait -ldflags="$(LDFLAGS)"
 
 .PHONY: test
 test:

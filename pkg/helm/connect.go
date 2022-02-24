@@ -15,14 +15,14 @@ var (
 )
 
 // GetActionConfig returns action configuration based on Helm env
-func GetActionConfig(namespace string, kubeConfig common.KubeConfig) (*action.Configuration, error) {
+func GetActionConfig(kubeConfig common.KubeConfig) (*action.Configuration, error) {
 	actionConfig := new(action.Configuration)
 
 	// Add kube config settings passed by user
 	settings.KubeConfig = kubeConfig.File
 	settings.KubeContext = kubeConfig.Context
 
-	err := actionConfig.Init(settings.RESTClientGetter(), namespace, os.Getenv("HELM_DRIVER"), debug)
+	err := actionConfig.Init(settings.RESTClientGetter(), settings.Namespace(), os.Getenv("HELM_DRIVER"), debug)
 	if err != nil {
 		return nil, err
 	}
