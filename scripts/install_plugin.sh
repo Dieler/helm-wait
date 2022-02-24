@@ -11,11 +11,11 @@ echo "Downloading and installing helm-wait v${version} ..."
 
 url=""
 if [ "$(uname)" = "Darwin" ]; then
-    url="https://github.com/Dieler/helm-wait/releases/download/v${version}/helm-wait-macos.tgz"
+    url="https://github.com/dieler/helm-wait/releases/download/v${version}/helm-wait-macos.tgz"
 elif [ "$(uname)" = "Linux" ] ; then
-    url="https://github.com/Dieler/helm-wait/releases/download/v${version}/helm-wait-linux.tgz"
+    url="https://github.com/dieler/helm-wait/releases/download/v${version}/helm-wait-linux.tgz"
 else
-    url="https://github.com/Dieler/helm-wait/releases/download/v${version}/helm-wait-windows.tgz"
+    url="https://github.com/dieler/helm-wait/releases/download/v${version}/helm-wait-windows.tgz"
 fi
 
 echo "$url"
