@@ -56,5 +56,5 @@ The above will install this plugin into your `$HELM_PLUGINS` directory.
 
 ### Prerequisites
 
-- You need to have [Go 1.16](http://golang.org) installed.
+- You need to have [Go 1.21](http://golang.org) installed.
 

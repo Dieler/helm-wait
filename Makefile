@@ -8,12 +8,12 @@ LDFLAGS := -X $(PKG)/cmd.Version=$(PLUGIN_VERSION)
 
 .PHONY: deps
 deps:
-	go get github.com/spf13/cobra@v1.1.3
+	go get github.com/spf13/cobra@v1.7.0
 	go get github.com/spf13/pflag@v1.0.5
-	go get gopkg.in/yaml.v2@v2.3.0
+	go get gopkg.in/yaml.v2@v2.4.0
 	go get github.com/mgutz/ansi
-	go get helm.sh/helm/v3@v3.5.1
-	go get k8s.io/client-go@v0.19.9
+	go get helm.sh/helm/v3@v3.13.1
+	go get k8s.io/client-go@v0.28.2
 
 .PHONY: format
 format:

@@ -22,7 +22,7 @@ var Config = filepath.Join(homedir.HomeDir(), ".kube", "config")
 
 type Client struct {
 	clientset *kubernetes.Clientset
-	out io.Writer
+	out       io.Writer
 }
 
 func New(out io.Writer) (*Client, error) {
@@ -140,9 +140,9 @@ func (c *Client) rsListFromClient() RsListFunc {
 
 // EqualIgnoreHash returns true if two given podTemplateSpec are equal, ignoring the diff in value of Labels[pod-template-hash]
 // We ignore pod-template-hash because:
-// 1. The hash result would be different upon podTemplateSpec API changes
-//    (e.g. the addition of a new field will cause the hash code to change)
-// 2. The deployment template won't have hash labels
+//  1. The hash result would be different upon podTemplateSpec API changes
+//     (e.g. the addition of a new field will cause the hash code to change)
+//  2. The deployment template won't have hash labels
 func EqualIgnoreHash(template1, template2 *v1.PodTemplateSpec) bool {
 	t1Copy := template1.DeepCopy()
 	t2Copy := template2.DeepCopy()
