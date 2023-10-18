@@ -67,7 +67,7 @@ func upgrade(releaseName, namespace string, kubeConfig common.KubeConfig) error 
 	if err != nil {
 		return err
 	}
-	currentRelease := history[len(history) - 1]
+	currentRelease := history[len(history)-1]
 	currentRelease.Info.Status.IsPending()
 	if currentRelease.Info.Status.IsPending() {
 		fmt.Printf("Current version is not an update or was not successful: version=%d, status=%s\n", currentRelease.Version, currentRelease.Info.Status)
